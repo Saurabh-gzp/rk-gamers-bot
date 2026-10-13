@@ -1,5 +1,6 @@
 """Shared helpers: safe sending, HTML rendering, content extraction."""
 import html
+import traceback
 
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, TelegramError
@@ -12,6 +13,26 @@ def is_admin(uid) -> bool:
         return int(uid) in ADMINS
     except (TypeError, ValueError):
         return False
+
+
+async def notify_admins_error(context, src, error):
+    """DM the full traceback of an error to all admins.
+    Used by bot.on_error AND by inline except-blocks that must stay silent
+    to the user but still be visible to the owner in Telegram."""
+    try:
+        tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+        tail = esc(tb[-1800:])
+        for adm in ADMINS:
+            try:
+                await context.bot.send_message(
+                    adm,
+                    f"⚠️ <b>Bot Error</b>\nInput: <code>{esc(src)}</code>\n\n<pre>{tail}</pre>",
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def esc(s) -> str:

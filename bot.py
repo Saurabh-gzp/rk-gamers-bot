@@ -9,16 +9,13 @@ Local dev mode (no RENDER_EXTERNAL_URL): long polling.
 import asyncio
 import logging
 import signal
-import traceback
 
 from aiohttp import web
 from telegram import BotCommand, Update
-from telegram.constants import ParseMode
 from telegram.ext import Application
 
 import handlers
 from config import (
-    ADMINS,
     ALLOWED_UPDATES,
     BOT_TOKEN,
     DB_NAME,
@@ -28,7 +25,7 @@ from config import (
     validate,
 )
 from database.db import init_db
-from utils.helpers import esc
+from utils.helpers import notify_admins_error
 
 logging.basicConfig(
     format="%(asctime)s | %(name)s | %(levelname)s | %(message)s", level=logging.INFO
@@ -77,18 +74,7 @@ def build_app() -> Application:
                 src = f"msg: {msg.text[:80]}"
             else:
                 src = "?"
-            tb = "".join(traceback.format_exception(
-                type(context.error), context.error, context.error.__traceback__))
-            tail = esc(tb[-1800:])
-            for adm in ADMINS:
-                try:
-                    await context.bot.send_message(
-                        adm,
-                        f"⚠️ <b>Bot Error</b>\nInput: <code>{esc(src)}</code>\n\n<pre>{tail}</pre>",
-                        parse_mode=ParseMode.HTML,
-                    )
-                except Exception:
-                    pass
+            await notify_admins_error(context, src, context.error)
         except Exception:
             pass
 

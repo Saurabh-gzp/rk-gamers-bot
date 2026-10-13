@@ -15,7 +15,7 @@ from database.db import (
     upsert_user,
     upd_settings,
 )
-from utils.helpers import bot_is_member, esc, is_admin, render, safe_answer, send_safe
+from utils.helpers import bot_is_member, esc, is_admin, notify_admins_error, render, safe_answer, send_safe, user_link_name
 from utils.keyboards import cb, kb, nav_row, paginate, url
 
 log = logging.getLogger(__name__)
@@ -98,8 +98,11 @@ async def cmd_start(update, context: ContextTypes.DEFAULT_TYPE):
     if payload and payload.startswith("r_"):
         try:
             notice = await handle_ref(update, context, tg, payload)
-        except Exception:
+        except Exception as e:
+            # NEVER silent: owner must see every referral failure in Telegram
             log.exception("ref handling failed")
+            await notify_admins_error(context, f"/start {payload}", e)
+            notice = "⚠️ Invite process me technical problem aayi. Dobara try karo ya owner se batao."
 
     # Force-sub gate (admins exempt)
     if not is_admin(tg.id) and s.get("force_sub_on") and s.get("force_sub"):
@@ -117,8 +120,8 @@ async def cmd_start(update, context: ContextTypes.DEFAULT_TYPE):
 
 # ------------------------------------------------------------------ referral logic
 async def handle_ref(update, context, tg, payload) -> str | None:
-    """Process 'r_<inviter>_<button>' deep link. Returns notice text for main menu (or None)."""
-    from config import OWNER_ID
+    """Process 'r_<inviter>_<button>' deep link. Returns notice text for main menu (or None).
+    EVERY valid click is reported to the link owner — click / join / reward / leave, sab visible."""
     p = parse_ref(payload)
     if not p:
         return None
@@ -135,6 +138,9 @@ async def handle_ref(update, context, tg, payload) -> str | None:
     if not inviter or inviter.get("banned"):
         return "❌ Ye invite link valid nahi hai."
 
+    # track the click + identify the visitor for owner notifications
+    await db.buttons.update_one({"_id": btn["_id"]}, {"$inc": {"stats.clicks": 1}})
+    who = user_link_name(tg)
     pair = await db.joins.find_one({"inviter": inviter_id, "invitee": tg.id, "button_no": bno})
     s = await get_settings()
 
@@ -151,6 +157,12 @@ async def handle_ref(update, context, tg, payload) -> str | None:
     if not pair and s.get("strict", True):
         other = await db.joins.find_one({"invitee": tg.id, "button_no": bno})
         if other:
+            await send_safe(
+                context.bot, inviter_id,
+                f"👀 {who} ne aapka link click kiya!\n"
+                f"⚠️ Lekin ye user is reward me pehle hi kisi aur ke through counted hai "
+                f"(anti-fraud) — aapko is click se count nahi milega.",
+            )
             return "⚠️ Is reward ke liye aap pehle hi kisi aur ke through counted ho. Dobara count nahi hoga."
 
     chan = await get_channel(btn.get("channel_id"))
@@ -159,6 +171,14 @@ async def handle_ref(update, context, tg, payload) -> str | None:
 
     member = await bot_is_member(context, chan["channel_id"], tg.id)
     if member is True:
+        # old member = can never be counted — but the owner MUST see this click
+        await send_safe(
+            context.bot, inviter_id,
+            f"👀 {who} ne aapka link click kiya!\n"
+            f"⚠️ Lekin ye user <b>{esc(chan['title'])}</b> ka member <b>pehle se</b> hai — "
+            f"sirf <b>naye members</b> hi invite me count hote hain.\n"
+            f"💡 Aise users ko link bhejo jo channel me <b>pehle kabhi join nahi hue</b>.",
+        )
         return (
             "ℹ️ Aap pehle se is channel ke member ho.\n"
             "Sirf <b>naye members</b> hi invite me count hote hain — purana member dobara count nahi hota."
@@ -166,6 +186,12 @@ async def handle_ref(update, context, tg, payload) -> str | None:
 
     # store pending invite — completed when user actually joins the channel
     await upsert_invite(tg.id, inviter_id, bno, chan["channel_id"])
+    await send_safe(
+        context.bot, inviter_id,
+        f"👀 <b>{who}</b> ne aapka link click kiya! 🎯\n"
+        f"⏳ Wo ab <b>{esc(chan['title'])}</b> join karega — join hote hi aapko "
+        f"<b>+1 join</b> milega aur reward bhi!",
+    )
 
     link = chan.get("invite_link") or (f"https://t.me/{chan['username']}" if chan.get("username") else None)
     rows = []

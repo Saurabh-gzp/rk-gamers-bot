@@ -84,6 +84,9 @@ async def cb_stats(update, context):
     joins24 = await db.joins.count_documents({"counted_at": {"$gte": day_ago}})
     pending = await db.invites.count_documents({"status": "pending"})
     delivered = await db.milestones.count_documents({})
+    clicks = 0
+    async for b in db.buttons.find({}, {"stats.clicks": 1}):
+        clicks += (b.get("stats") or {}).get("clicks", 0)
 
     text = (
         "📊 <b>Bot Statistics</b>\n\n"
@@ -91,6 +94,7 @@ async def cb_stats(update, context):
         f"🚫 Banned: {banned}\n\n"
         f"🔘 Reward Buttons: <b>{btns}</b> (active: {active_btns})\n"
         f"📺 Channels: <b>{chans}</b> (✅ verified: {verified})\n\n"
+        f"👀 Link Clicks: <b>{clicks}</b>\n"
         f"🔗 Total Joins: <b>{joins}</b> (24h: {joins24})\n"
         f"⏳ Pending Invites: {pending}\n"
         f"🎁 Rewards Delivered: <b>{delivered}</b>"
