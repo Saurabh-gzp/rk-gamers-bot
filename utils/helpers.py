@@ -65,7 +65,10 @@ async def send_safe(bot, chat_id, text, kb=None):
 async def render(update, context, text, kb=None):
     """Edit message on callback, reply on message. Falls back to sending a new message."""
     q = getattr(update, "callback_query", None)
-    if q is not None and q.message is not None:
+    msg = q.message if q is not None else None
+    # InaccessibleMessage (>48h old) has no edit_text — tapping buttons on such
+    # messages must fall back to sending a fresh message instead of dead-tapping.
+    if q is not None and msg is not None and hasattr(msg, "edit_text"):
         try:
             await q.message.edit_text(
                 text, parse_mode=ParseMode.HTML, reply_markup=kb, disable_web_page_preview=True

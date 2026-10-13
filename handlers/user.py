@@ -263,7 +263,8 @@ async def cb_getc(update, context):
     items = btn.get("content") or []
     if not items:
         return await render(update, context, "📭 Abhi is button me koi content nahi hai.", back_home())
-    await q.message.reply_text("📤 Delivering...")
+    chat_id = update.effective_chat.id if update.effective_chat else tg.id
+    await send_safe(context.bot, chat_id, "📤 Delivering...")
     for it in items:
         await send_content_item(context.bot, tg.id, it)
 

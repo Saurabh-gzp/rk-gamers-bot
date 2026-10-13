@@ -107,7 +107,11 @@ async def run_webhook(app):
             data = await request.json()
         except Exception:
             return web.Response(status=400, text="bad json")
-        update = Update.de_json(data, app.bot)
+        try:
+            update = Update.de_json(data, app.bot)
+        except Exception:
+            log.exception("malformed update could not be parsed — skipped")
+            return web.Response(text="OK")  # never 500: Telegram would retry forever
         if update is not None:
             try:
                 await app.process_update(update)
