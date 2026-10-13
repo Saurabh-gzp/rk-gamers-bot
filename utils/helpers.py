@@ -164,18 +164,26 @@ def item_label(item, idx=None):
         t = html.unescape(item.get("text", ""))
         t = t.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "")
         t = t.replace("<code>", "").replace("</code>", "").replace("<u>", "").replace("</u>", "")
-        t = t.replace("<s>", "").replace("</s>").replace("<a href=", "").replace("</a>", "")
+        t = t.replace("<s>", "").replace("</s>", "").replace("<a href=", "").replace("</a>", "")
         t = " ".join(t.split())[:40]
         return f"{e} Text: {t}..."
     return f"{e} {item.get('type', 'media').capitalize()}" + (f" {idx + 1}" if idx is not None else "")
 
 
 # ------------------------------------------------------------------ membership check
+def member_in_chat(m) -> bool:
+    """True if a ChatMember object represents someone currently inside the chat.
+    Handles: member / administrator / creator / restricted-with-is_member (supergroups)."""
+    if m.status in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR):
+        return True
+    return m.status == ChatMemberStatus.RESTRICTED and bool(getattr(m, "is_member", False))
+
+
 async def bot_is_member(context, channel_id, uid):
     """True/False. None = unknown (bot not admin in that channel)."""
     try:
         m = await context.bot.get_chat_member(channel_id, uid)
-        return m.status in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER)
+        return member_in_chat(m)
     except TelegramError:
         return None
 

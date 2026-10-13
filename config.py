@@ -1,5 +1,12 @@
 import os
 
+try:  # local dev: load .env if python-dotenv available (real env vars keep precedence)
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 OWNER_ID = int(os.environ.get("OWNER_ID", "0") or 0)
 MONGO_URI = os.environ.get("MONGO_URI", "").strip()

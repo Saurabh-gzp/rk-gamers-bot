@@ -84,7 +84,7 @@ async def run_webhook(app):
         url=f"{url}/{WEBHOOK_SECRET}",
         allowed_updates=ALLOWED_UPDATES,
         secret_token=WEBHOOK_SECRET,
-        drop_pending_updates=True,
+        drop_pending_updates=False,  # deliver updates queued while the service was down
     )
     log.info("Webhook set: %s/%s", url, WEBHOOK_SECRET)
     await app.start()
@@ -118,7 +118,8 @@ async def run_webhook(app):
     webapp = web.Application()
     webapp.router.add_get("/healthz", health)
     webapp.router.add_get("/", status_page)
-    webapp.router.add_post("/" + WEBHOOK_SECRET, hook)
+    # VARIABLE route so request.match_info["secret"] works (static route => match_info empty => 403 bug)
+    webapp.router.add_post("/{secret}", hook)
 
     runner = web.AppRunner(webapp, access_log=None)
     await runner.setup()

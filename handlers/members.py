@@ -8,7 +8,7 @@ from config import OWNER_ID
 from database import db
 from database.db import get_button_by_no, upsert_channel
 from handlers.user import process_join, process_leave
-from utils.helpers import esc, send_safe
+from utils.helpers import esc, member_in_chat, send_safe
 
 log = logging.getLogger(__name__)
 
@@ -25,14 +25,9 @@ async def on_chat_member(update, context: ContextTypes.DEFAULT_TYPE):
     if u.is_bot:
         return
 
-    joined = (
-        new.status in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR)
-        and old.status in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED)
-    )
-    left = (
-        new.status in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED)
-        and old.status in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR)
-    )
+    # handles member/administrator/creator AND restricted-with-is_member (common in supergroups)
+    joined = member_in_chat(new) and not member_in_chat(old)
+    left = (not member_in_chat(new)) and member_in_chat(old)
     try:
         if joined:
             await process_join(context, chat.id, u)
