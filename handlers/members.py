@@ -1,7 +1,7 @@
 """chat_member / my_chat_member updates: channel join = referral complete, leave = count -1."""
 import logging
 
-from telegram.constants import ChatMemberStatus, ChatType
+from telegram.constants import ChatType
 from telegram.ext import ContextTypes
 
 from config import OWNER_ID
@@ -46,7 +46,8 @@ async def on_my_chat_member(update, context: ContextTypes.DEFAULT_TYPE):
     if chat.type not in (ChatType.CHANNEL, ChatType.SUPERGROUP):
         return
     new = cmu.new_chat_member.status
-    if new == ChatMemberStatus.ADMINISTRATOR:
+    # raw Bot API strings — ChatMemberStatus enum names differ across PTB versions
+    if new == "administrator":
         ch = await upsert_channel(chat, verified=True)
         if not ch.get("invite_link"):
             from handlers.mng_channels import verify_and_update
@@ -56,7 +57,7 @@ async def on_my_chat_member(update, context: ContextTypes.DEFAULT_TYPE):
             f"✅ Bot ab <b>{esc(chat.title)}</b> ka <b>admin</b> ban gaya — channel verified!\n"
             f"Ab is channel ke liye reward buttons setup kar sakte ho 🎯",
         )
-    elif new in (ChatMemberStatus.LEFT, ChatMemberStatus.KICKED):
+    elif new in ("left", "kicked", "banned"):
         await db.channels.update_one({"channel_id": chat.id}, {"$set": {"verified": False}})
         await send_safe(
             context.bot, OWNER_ID,

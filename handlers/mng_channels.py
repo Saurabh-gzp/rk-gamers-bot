@@ -3,7 +3,7 @@ import logging
 
 from bson import ObjectId
 from telegram import Chat
-from telegram.constants import ChatMemberStatus, ChatType
+from telegram.constants import ChatType
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
 

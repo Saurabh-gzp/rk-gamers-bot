@@ -1,7 +1,7 @@
 """Shared helpers: safe sending, HTML rendering, content extraction."""
 import html
 
-from telegram.constants import ChatMemberStatus, ParseMode
+from telegram.constants import ParseMode
 from telegram.error import BadRequest, TelegramError
 
 from config import ADMINS
@@ -198,12 +198,20 @@ def item_label(item, idx=None):
 
 
 # ------------------------------------------------------------------ membership check
+# NOTE: compare against RAW Bot API strings ("creator"/"kicked"/...), NOT
+# ChatMemberStatus enum members: PTB 21.10 has OWNER/BANNED, other versions
+# have CREATOR/KICKED — raw strings are identical in every version.
+JOINED_STATUSES = ("member", "administrator", "creator", "owner")
+
+
 def member_in_chat(m) -> bool:
     """True if a ChatMember object represents someone currently inside the chat.
-    Handles: member / administrator / creator / restricted-with-is_member (supergroups)."""
-    if m.status in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR):
+    Handles: member / administrator / creator(owner) / restricted-with-is_member (supergroups)."""
+    if m is None:
+        return False
+    if getattr(m, "status", None) in JOINED_STATUSES:
         return True
-    return m.status == ChatMemberStatus.RESTRICTED and bool(getattr(m, "is_member", False))
+    return getattr(m, "status", None) == "restricted" and bool(getattr(m, "is_member", False))
 
 
 async def bot_is_member(context, channel_id, uid):
@@ -218,6 +226,6 @@ async def bot_is_member(context, channel_id, uid):
 async def bot_is_channel_admin(context, channel_id):
     try:
         m = await context.bot.get_chat_member(channel_id, (await context.bot.get_me()).id)
-        return m.status == ChatMemberStatus.ADMINISTRATOR
+        return m.status == "administrator"
     except TelegramError:
         return False
