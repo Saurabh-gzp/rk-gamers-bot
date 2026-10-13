@@ -1,11 +1,17 @@
 """RK Gamers Bot — entry point.
 
-Render (web service) mode: webhook + /healthz keep-alive endpoint.
+Render (web service) mode: custom aiohttp server serves
+  - POST /<WEBHOOK_SECRET>  -> Telegram webhook (processed by PTB)
+  - GET  /healthz           -> keep-alive health check (UptimeRobot friendly)
+  - GET  /                  -> friendly status page
 Local dev mode (no RENDER_EXTERNAL_URL): long polling.
 """
+import asyncio
 import logging
+import signal
 
-from telegram import BotCommand
+from aiohttp import web
+from telegram import BotCommand, Update
 from telegram.ext import Application
 
 import handlers
@@ -13,7 +19,6 @@ from config import (
     ALLOWED_UPDATES,
     BOT_TOKEN,
     DB_NAME,
-    OWNER_ID,
     PORT,
     WEBHOOK_SECRET,
     WEBHOOK_URL,
@@ -35,8 +40,7 @@ async def post_init(app):
         log.error("CONFIG PROBLEMS: %s", ", ".join(problems))
     await init_db()
     me = await app.bot.get_me()
-    log.info("Bot started: @%s (id=%s) | db=%s | mode=%s",
-             me.username, me.id, DB_NAME, "webhook" if WEBHOOK_URL else "polling")
+    log.info("Bot started: @%s (id=%s) | db=%s", me.username, me.id, DB_NAME)
     try:
         await app.bot.set_my_commands([
             BotCommand("start", "🏠 Main Menu"),
@@ -47,10 +51,14 @@ async def post_init(app):
         ])
     except Exception:
         log.warning("set_my_commands failed")
+    return me
 
 
 def build_app() -> Application:
-    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    builder = Application.builder().token(BOT_TOKEN).post_init(post_init)
+    if WEBHOOK_URL:
+        builder = builder.updater(None)  # custom webhook server (see below)
+    app = builder.build()
     handlers.register(app)
 
     async def on_error(update, context):
@@ -60,24 +68,85 @@ def build_app() -> Application:
     return app
 
 
+# ------------------------------------------------------------------ polling (local dev)
+def run_polling(app):
+    log.info("Polling mode (local dev)")
+    app.run_polling(allowed_updates=ALLOWED_UPDATES, drop_pending_updates=True)
+
+
+# ------------------------------------------------------------------ webhook (Render)
+async def run_webhook(app):
+    me = await app.initialize()
+    await post_init(app)
+
+    url = WEBHOOK_URL.rstrip("/")
+    await app.bot.set_webhook(
+        url=f"{url}/{WEBHOOK_SECRET}",
+        allowed_updates=ALLOWED_UPDATES,
+        secret_token=WEBHOOK_SECRET,
+        drop_pending_updates=True,
+    )
+    log.info("Webhook set: %s/%s", url, WEBHOOK_SECRET)
+    await app.start()
+
+    async def health(_request):
+        return web.Response(text="OK")
+
+    async def status_page(_request):
+        return web.Response(
+            text="🤖 RK Gamers Bot is running! | healthz: /healthz",
+            content_type="text/plain",
+        )
+
+    async def hook(request):
+        if request.match_info.get("secret") != WEBHOOK_SECRET:
+            return web.Response(status=403, text="forbidden")
+        if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:
+            return web.Response(status=403, text="bad secret token")
+        try:
+            data = await request.json()
+        except Exception:
+            return web.Response(status=400, text="bad json")
+        update = Update.de_json(data, app.bot)
+        if update is not None:
+            try:
+                await app.process_update(update)
+            except Exception:
+                log.exception("process_update failed")
+        return web.Response(text="OK")
+
+    webapp = web.Application()
+    webapp.router.add_get("/healthz", health)
+    webapp.router.add_get("/", status_page)
+    webapp.router.add_post("/" + WEBHOOK_SECRET, hook)
+
+    runner = web.AppRunner(webapp, access_log=None)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    log.info("Web server listening on 0.0.0.0:%s (healthz + webhook)", PORT)
+
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except NotImplementedError:
+            pass
+    try:
+        await stop.wait()
+    finally:
+        await runner.cleanup()
+        await app.stop()
+        await app.shutdown()
+
+
 def main():
     app = build_app()
     if WEBHOOK_URL:
-        url = WEBHOOK_URL.rstrip("/")
-        log.info("Webhook mode: %s/%s port=%s", url, WEBHOOK_SECRET, PORT)
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=WEBHOOK_SECRET,
-            webhook_url=f"{url}/{WEBHOOK_SECRET}",
-            allowed_updates=ALLOWED_UPDATES,
-            secret_token=WEBHOOK_SECRET,
-            drop_pending_updates=True,
-            health_check_path="/healthz",
-        )
+        asyncio.run(run_webhook(app))
     else:
-        log.info("Polling mode (local dev)")
-        app.run_polling(allowed_updates=ALLOWED_UPDATES, drop_pending_updates=True)
+        run_polling(app)
 
 
 if __name__ == "__main__":
