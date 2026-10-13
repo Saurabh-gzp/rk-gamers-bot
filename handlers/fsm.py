@@ -29,6 +29,7 @@ async def cb_cancel(update, context):
     context.user_data.pop("st", None)
     context.user_data.pop("tmp_content", None)
     context.user_data.pop("bc_item", None)
+    context.user_data.pop("mi_setup", None)
     if is_admin(q.from_user.id):
         await render_panel(update, context)
     else:
@@ -38,6 +39,7 @@ async def cb_cancel(update, context):
 async def cmd_cancel(update, context):
     context.user_data.pop("st", None)
     context.user_data.pop("tmp_content", None)
+    context.user_data.pop("mi_setup", None)
     await update.message.reply_text("❌ Cancelled.")
     if is_admin(update.effective_user.id):
         await render_panel(update, context)
@@ -67,7 +69,8 @@ async def cb_save_yes(update, context):
         context.user_data.pop("tmp_content", None)
         context.user_data.pop("tmp_msg", None)
         if b:
-            await render_button(update, context, await get_button(b["_id"]), 0)
+            from handlers.mng_buttons import render_mi_count
+            await render_mi_count(update, context, await get_button(b["_id"]))
     elif st and st[0] == "btn_contadd":
         _, bid = st
         b = await get_button(ObjectId(bid))
@@ -90,6 +93,7 @@ async def cb_save_no(update, context):
     context.user_data.pop("st", None)
     context.user_data.pop("tmp_content", None)
     context.user_data.pop("tmp_msg", None)
+    context.user_data.pop("mi_setup", None)
     if st[0] == "btn_content":
         # fresh button cancelled during creation -> delete it
         try:
@@ -201,6 +205,9 @@ async def fsm_entry(update, context: ContextTypes.DEFAULT_TYPE):
                 if after:
                     return await render_mi_items(update, context, ObjectId(bid), n)
                 if b:
+                    from handlers.mng_buttons import mi_setup_advance
+                    if await mi_setup_advance(update, context, b["_id"], n):
+                        return
                     return await render_button(update, context, b, 0)
                 return
 

@@ -71,6 +71,7 @@ def register(app):
     app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_type, pattern=r"^mitype_([a-f0-9]{24})_(\d+)_(c|t|b|r)$"))
     app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_toggle, pattern=r"^mitgl_([a-f0-9]{24})_(\d+)_(\d+|all)$"))
     app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_done, pattern=r"^midone_([a-f0-9]{24})_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_count, pattern=r"^misetup_([a-f0-9]{24})_(\d+)$"))
     app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_text, pattern=r"^mitext_([a-f0-9]{24})_(\d+)$"))
 
     # ---- callbacks (fsm confirm/cancel)
