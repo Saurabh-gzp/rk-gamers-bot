@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 
 from database import db
 from database.db import (
-    all_channels,
+    all_buttons,
     create_button,
     delete_button,
     get_button,
