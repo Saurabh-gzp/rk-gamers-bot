@@ -1,0 +1,87 @@
+"""Handler registration for RK Gamers Bot."""
+from telegram.ext import CallbackQueryHandler, ChatMemberHandler, CommandHandler, MessageHandler, filters
+
+from handlers import admin, fsm, mng_buttons, mng_channels, members, start, user
+
+
+def register(app):
+    # ---- commands
+    app.add_handler(CommandHandler("start", start.cmd_start))
+    app.add_handler(CommandHandler("admin", admin.cmd_admin))
+    app.add_handler(CommandHandler("profile", user.cmd_profile))
+    app.add_handler(CommandHandler("help", user.cmd_help))
+    app.add_handler(CommandHandler("cancel", fsm.cmd_cancel))
+
+    # ---- callbacks (user)
+    app.add_handler(CallbackQueryHandler(start.cb_noop, pattern=r"^noop$"))
+    app.add_handler(CallbackQueryHandler(start.cb_home, pattern=r"^home$"))
+    app.add_handler(CallbackQueryHandler(start.cb_page, pattern=r"^upg_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(start.cb_fschk, pattern=r"^fschk$"))
+    app.add_handler(CallbackQueryHandler(user.cb_open, pattern=r"^ub_(\d+)_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(user.cb_link, pattern=r"^ulink_(\d+)_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(user.cb_getc, pattern=r"^ucont_(\d+)_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(user.cb_prof, pattern=r"^uprof$"))
+    app.add_handler(CallbackQueryHandler(user.cb_help, pattern=r"^uhelp$"))
+    app.add_handler(CallbackQueryHandler(user.cb_join_check, pattern=r"^jchk_(\d+)_(\d+)$"))
+
+    # ---- callbacks (admin panel)
+    app.add_handler(CallbackQueryHandler(admin.cb_panel, pattern=r"^adm$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_stats, pattern=r"^adst$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_broadcast, pattern=r"^adbc$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_bc_ok, pattern=r"^bcok$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_bc_no, pattern=r"^bcno$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_users, pattern=r"^adbu_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_user_view, pattern=r"^adus_(\d+)_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_ban, pattern=r"^adbn_(\d+)_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_unban, pattern=r"^adub_(\d+)_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_settings, pattern=r"^adset$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_tgl_fs, pattern=r"^adfson$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_tgl_strict, pattern=r"^adstrict$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_tgl_alert, pattern=r"^adalert$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_fs_pick, pattern=r"^fsadd$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_fs_toggle, pattern=r"^fstgl_(-?\d+)$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_fs_done, pattern=r"^fsdone$"))
+
+    # ---- callbacks (channels)
+    app.add_handler(CallbackQueryHandler(mng_channels.cb_list, pattern=r"^adch_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_channels.cb_new, pattern=r"^chnew$"))
+    app.add_handler(CallbackQueryHandler(mng_channels.cb_view, pattern=r"^chv_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_channels.cb_check, pattern=r"^chck_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_channels.cb_del, pattern=r"^chdel_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_channels.cb_del_yes, pattern=r"^chdely_([a-f0-9]{24})$"))
+
+    # ---- callbacks (reward buttons)
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_list, pattern=r"^adbt_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_new, pattern=r"^btnew$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_view, pattern=r"^btv_([a-f0-9]{24})_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_rename, pattern=r"^btname_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_note, pattern=r"^btnote_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_chan_pick, pattern=r"^btchan_([a-f0-9]{24})_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_chan_set, pattern=r"^btsel_([a-f0-9]{24})_(-?\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_chan_skip, pattern=r"^btskip_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_content, pattern=r"^btcont_([a-f0-9]{24})_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_cont_add, pattern=r"^btcadd_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_cont_del, pattern=r"^btcdel_([a-f0-9]{24})_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_dir, pattern=r"^btdir_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_act, pattern=r"^btact_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_del, pattern=r"^btdel_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_del_yes, pattern=r"^btdely_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_milestones, pattern=r"^btmil_([a-f0-9]{24})$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_sel, pattern=r"^misel_([a-f0-9]{24})_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_type, pattern=r"^mitype_([a-f0-9]{24})_(\d+)_(c|t|b|r)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_toggle, pattern=r"^mitgl_([a-f0-9]{24})_(\d+)_(\d+|all)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_done, pattern=r"^midone_([a-f0-9]{24})_(\d+)$"))
+    app.add_handler(CallbackQueryHandler(mng_buttons.cb_mi_text, pattern=r"^mitext_([a-f0-9]{24})_(\d+)$"))
+
+    # ---- callbacks (fsm confirm/cancel)
+    app.add_handler(CallbackQueryHandler(fsm.cb_save_yes, pattern=r"^csvy$"))
+    app.add_handler(CallbackQueryHandler(fsm.cb_save_no, pattern=r"^csvn$"))
+    app.add_handler(CallbackQueryHandler(fsm.cb_cancel, pattern=r"^cancel$"))
+    app.add_handler(CallbackQueryHandler(admin.cb_search, pattern=r"^usearch$"))
+
+    # ---- FSM: all private non-command messages
+    app.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, fsm.fsm_entry))
+
+    # ---- member updates (channel join/leave)
+    app.add_handler(ChatMemberHandler(members.on_chat_member, ChatMemberHandler.CHAT_MEMBER))
+    app.add_handler(ChatMemberHandler(members.on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))
