@@ -2,6 +2,7 @@
 import logging
 
 from bson import ObjectId
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from config import OWNER_ID
@@ -16,7 +17,7 @@ from handlers.mng_channels import (
 )
 from handlers.mng_buttons import render_button, render_button_list, render_mi_items
 from handlers.start import show_main_menu
-from utils.helpers import extract_item, is_admin, item_label, render, send_content_item, send_safe
+from utils.helpers import esc, extract_item, is_admin, item_label, render, safe_answer, send_content_item, send_safe
 from utils.keyboards import back_adm, back_home, cb, kb
 
 log = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ log = logging.getLogger(__name__)
 
 async def cb_cancel(update, context):
     q = update.callback_query
-    await q.answer("Cancelled!")
+    await safe_answer(q, "Cancelled!")
     context.user_data.pop("st", None)
     context.user_data.pop("tmp_content", None)
     context.user_data.pop("bc_item", None)
@@ -47,7 +48,7 @@ async def cmd_cancel(update, context):
 # ------------------------------------------------------------------ content save/cancel
 async def cb_save_yes(update, context):
     q = update.callback_query
-    await q.answer("💾 Saved!")
+    await safe_answer(q, "💾 Saved!")
     st = context.user_data.get("st")
     buf = context.user_data.get("tmp_content") or []
     if st and st[0] == "btn_content":
@@ -84,7 +85,7 @@ async def cb_save_yes(update, context):
 
 async def cb_save_no(update, context):
     q = update.callback_query
-    await q.answer("Cancelled!")
+    await safe_answer(q, "Cancelled!")
     st = context.user_data.get("st") or ("", "")
     context.user_data.pop("st", None)
     context.user_data.pop("tmp_content", None)
@@ -123,6 +124,7 @@ async def _content_status(update, context, buf):
             await context.bot.edit_message_text(
                 text, chat_id=update.effective_chat.id, message_id=sid,
                 reply_markup=kb_rows, disable_web_page_preview=True,
+                parse_mode=ParseMode.HTML,
             )
             return
         except Exception:
@@ -173,16 +175,20 @@ async def fsm_entry(update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             if kind == "btn_note":
+                if not m.text:
+                    return await m.reply_text("📝 Sirf TEXT bhejo (photo/file nahi).")
                 bid = ObjectId(st[1])
-                note = (m.text or "").strip()[:3000]
+                note = m.text.strip()[:3000]
                 await db.buttons.update_one({"_id": bid}, {"$set": {"notebook": note}})
                 context.user_data.pop("st", None)
                 b = await get_button(bid)
                 return await render_button(update, context, b, 0)
 
             if kind == "mi_text":
+                if not m.text:
+                    return await m.reply_text("📝 Sirf TEXT bhejo (photo/video nahi).")
                 bid, n = st[1], st[2]
-                text = (m.text or "").strip()[:3000]
+                text = m.text.strip()[:3000]
                 b = await get_button(ObjectId(bid))
                 if b:
                     ms = b.get("milestones") or {}
@@ -208,6 +214,7 @@ async def fsm_entry(update, context: ContextTypes.DEFAULT_TYPE):
                 return await m.reply_text(
                     "👀 Upar <b>preview</b> hai. Sab users ko bhejna hai?",
                     reply_markup=kb([[cb("✅ Haan Send Karo", "bcok"), cb("❌ Cancel", "bcno")]]),
+                    parse_mode=ParseMode.HTML,
                 )
 
             if kind == "ch_in":
@@ -217,7 +224,9 @@ async def fsm_entry(update, context: ContextTypes.DEFAULT_TYPE):
                     context.user_data["st"] = ("ch_in",)
                     return await m.reply_text(res)
                 await m.reply_text(
-                    ADD_INSTRUCTIONS.format(title=res["title"], status=VERIFIED_NOTE if res.get("verified") else ""),
+                    ADD_INSTRUCTIONS.format(title=esc(res["title"]), status=VERIFIED_NOTE if res.get("verified") else ""),
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True,
                 )
                 return await render_channel_view(update, context, res)
 
@@ -230,7 +239,11 @@ async def fsm_entry(update, context: ContextTypes.DEFAULT_TYPE):
                     return await m.reply_text("❌ Numeric user ID bhejo.", reply_markup=back_adm())
                 u = await get_user(uid)
                 if not u:
-                    return await m.reply_text(f"❌ User <code>{uid}</code> nahi mila.", reply_markup=back_adm())
+                    return await m.reply_text(
+                        f"❌ User <code>{uid}</code> nahi mila.",
+                        reply_markup=back_adm(),
+                        parse_mode=ParseMode.HTML,
+                    )
                 return await render_user_view(update, context, uid, 0)
 
         except Exception:

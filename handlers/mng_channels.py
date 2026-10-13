@@ -10,7 +10,7 @@ from telegram.error import TelegramError
 from config import OWNER_ID
 from database import db
 from database.db import all_channels, delete_channel, get_channel, upsert_channel, upd_settings, get_settings
-from utils.helpers import bot_is_channel_admin, esc, is_admin, render, send_safe
+from utils.helpers import bot_is_channel_admin, esc, is_admin, render, safe_answer, send_safe
 from utils.keyboards import back_adm, cb, confirm_kb, kb, nav_row, paginate, url
 
 log = logging.getLogger(__name__)
@@ -32,7 +32,8 @@ async def render_channel_list(update, context, page=0):
 
 
 async def cb_list(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)  # navigation cancels any pending input
     await render_channel_list(update, context, int(context.matches[0].group(1)))
 
 
@@ -57,7 +58,8 @@ async def render_channel_view(update, context, ch):
 
 
 async def cb_view(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)
     ch = await db.channels.find_one({"_id": ObjectId(context.matches[0].group(1))})
     if ch:
         await render_channel_view(update, context, ch)
@@ -92,28 +94,30 @@ async def verify_and_update(context, channel_id):
 
 async def cb_check(update, context):
     q = update.callback_query
-    await q.answer("Checking...")
     doc = await db.channels.find_one({"_id": ObjectId(context.matches[0].group(1))})
     if not doc:
         return await render(update, context, "❌ Channel nahi mila.", back_adm())
     ch = await verify_and_update(context, doc["channel_id"])
     if ch:
         if ch.get("verified"):
-            await q.answer("✅ Bot admin hai — Verified!", show_alert=True)
+            # single answer with alert — double-answer before meant the alert NEVER showed
+            await safe_answer(q, "✅ Bot admin hai — Verified!", alert=True)
         else:
-            await q.answer(
+            await safe_answer(
+                q,
                 "❌ Bot admin nahi hai.\nChannel → Administrators → Add Admin → @rkgamersbot "
                 "(Invite Users + Ban Users rights dena) — fir Check Again dabao.",
-                show_alert=True,
+                alert=True,
             )
         await render_channel_view(update, context, ch)
     else:
+        await safe_answer(q, "❌ Channel access nahi ho pa raha. Kya channel exist karta hai?", alert=True)
         await render(update, context, "❌ Channel access nahi ho pa raha. Kya channel exist karta hai?", back_adm())
 
 
 # ------------------------------------------------------------------ delete
 async def cb_del(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     cid = context.matches[0].group(1)
     ch = await db.channels.find_one({"_id": ObjectId(cid)})
     await render(
@@ -125,7 +129,7 @@ async def cb_del(update, context):
 
 async def cb_del_yes(update, context):
     q = update.callback_query
-    await q.answer("Removed!")
+    await safe_answer(q, "Removed!")
     doc = await db.channels.find_one({"_id": ObjectId(context.matches[0].group(1))})
     if doc:
         await delete_channel(doc["channel_id"])
@@ -182,7 +186,8 @@ VERIFIED_NOTE = "✅ <b>Bot admin hai — VERIFIED!</b> Ab referral joins detect
 
 
 async def cb_new(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("tmp_content", None)
     context.user_data["st"] = ("ch_in",)
     await render(
         update, context,

@@ -14,7 +14,7 @@ from database.db import (
     get_channel,
     verified_channels,
 )
-from utils.helpers import esc, is_admin, item_label, render, send_safe
+from utils.helpers import esc, is_admin, item_label, render, safe_answer, send_safe
 from utils.keyboards import back_adm, back_home, cb, confirm_kb, kb, nav_row, nav_row_fmt, paginate, url
 
 log = logging.getLogger(__name__)
@@ -36,13 +36,15 @@ async def render_button_list(update, context, page=0):
 
 
 async def cb_list(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)  # navigation cancels any pending input
     await render_button_list(update, context, int(context.matches[0].group(1)))
 
 
 # ------------------------------------------------------------------ create
 async def cb_new(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("tmp_content", None)
     context.user_data["st"] = ("btn_name",)
     await render(
         update, context,
@@ -88,7 +90,7 @@ async def render_chan_pick(update, context, btn, page=0, fresh=False):
 
 
 async def cb_chan_pick(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     m = context.matches[0]
     btn = await get_button(ObjectId(m.group(1)))
     if btn:
@@ -97,7 +99,7 @@ async def cb_chan_pick(update, context):
 
 async def cb_chan_set(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     bid, chan_id = ObjectId(m.group(1)), int(m.group(2))
     ch = await get_channel(chan_id)
@@ -110,7 +112,7 @@ async def cb_chan_set(update, context):
 
 async def cb_chan_skip(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     btn = await get_button(ObjectId(context.matches[0].group(1)))
     if btn:
         await start_content_upload(update, context, btn)
@@ -177,7 +179,7 @@ async def render_button(update, context, btn, page=0):
 
 async def cb_view(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     btn = await get_button(ObjectId(m.group(1)))
     if btn:
@@ -189,15 +191,17 @@ async def cb_view(update, context):
 
 # ------------------------------------------------------------------ edit name / notebook
 async def cb_rename(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     bid = context.matches[0].group(1)
+    context.user_data.pop("tmp_content", None)
     context.user_data["st"] = ("btn_name2", bid)
     await render(update, context, "✏️ <b>Naya naam bhejo:</b>", kb([[cb("❌ Cancel", "cancel")]]))
 
 
 async def cb_note(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     bid = context.matches[0].group(1)
+    context.user_data.pop("tmp_content", None)
     context.user_data["st"] = ("btn_note", bid)
     await render(
         update, context,
@@ -212,7 +216,7 @@ async def cb_note(update, context):
 # ------------------------------------------------------------------ content manager
 async def cb_content(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     await render_content_list(update, context, ObjectId(m.group(1)), int(m.group(2)))
 
@@ -226,7 +230,7 @@ async def render_content_list(update, context, bid, page=0):
     text = (
         f"📦 <b>Content — {esc(btn['name'])}</b>\n\n"
         f"Total: <b>{len(items)}</b> items\n"
-        f"_{chr(0x1F5D1)}️ tap karke delete kar sakte ho_"
+        f"<i>🗑️ Tap karke delete kar sakte ho</i>"
     )
     rows = []
     for idx, it in chunk:
@@ -239,7 +243,7 @@ async def render_content_list(update, context, bid, page=0):
 
 async def cb_cont_del(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     bid, idx = ObjectId(m.group(1)), int(m.group(2))
     btn = await get_button(bid)
@@ -254,7 +258,7 @@ async def cb_cont_del(update, context):
 
 async def cb_cont_add(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     bid = context.matches[0].group(1)
     context.user_data["st"] = ("btn_contadd", str(bid))
     context.user_data["tmp_content"] = []
@@ -270,23 +274,24 @@ async def cb_cont_add(update, context):
 # ------------------------------------------------------------------ toggles & delete
 async def cb_dir(update, context):
     q = update.callback_query
-    await q.answer()
     bid = ObjectId(context.matches[0].group(1))
     btn = await get_button(bid)
-    if btn:
-        new = not btn.get("direct")
-        await db.buttons.update_one({"_id": bid}, {"$set": {"direct": new}})
-        btn["direct"] = new
-        if new:
-            await q.answer("✅ Direct ON — ab ye content bina referral ke milega!", show_alert=True)
-        else:
-            await q.answer("🔗 Referral required — link share karke reward milega.", show_alert=True)
-        await render_button(update, context, btn, 0)
+    if not btn:
+        return await render(update, context, "❌ Button nahi mila.", back_adm())
+    new = not btn.get("direct")
+    await db.buttons.update_one({"_id": bid}, {"$set": {"direct": new}})
+    btn["direct"] = new
+    # single answer with alert (double-answer kills the alert!)
+    if new:
+        await safe_answer(q, "✅ Direct ON — ab ye content bina referral ke milega!", alert=True)
+    else:
+        await safe_answer(q, "🔗 Referral required — link share karke reward milega.", alert=True)
+    await render_button(update, context, btn, 0)
 
 
 async def cb_act(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     bid = ObjectId(context.matches[0].group(1))
     btn = await get_button(bid)
     if btn:
@@ -297,7 +302,7 @@ async def cb_act(update, context):
 
 
 async def cb_del(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     bid = context.matches[0].group(1)
     btn = await get_button(ObjectId(bid))
     name = btn["name"] if btn else "ye button"
@@ -310,7 +315,7 @@ async def cb_del(update, context):
 
 async def cb_del_yes(update, context):
     q = update.callback_query
-    await q.answer("🗑️ Deleted!")
+    await safe_answer(q, "🗑️ Deleted!")
     await delete_button(ObjectId(context.matches[0].group(1)))
     context.user_data.pop("st", None)
     context.user_data.pop("tmp_content", None)
@@ -320,7 +325,9 @@ async def cb_del_yes(update, context):
 # ------------------------------------------------------------------ milestones
 async def cb_milestones(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
+    context.user_data.pop("mi_all", None)
+    context.user_data.pop("mi_items", None)
     await render_mil_panel(update, context, ObjectId(context.matches[0].group(1)))
 
 
@@ -351,7 +358,7 @@ async def render_mil_panel(update, context, bid):
 
 async def cb_mi_sel(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     await render_milestone(update, context, ObjectId(m.group(1)), int(m.group(2)))
 
@@ -419,7 +426,7 @@ async def render_mi_items(update, context, bid, n):
 
 async def cb_mi_type(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     bid, n, t = ObjectId(m.group(1)), int(m.group(2)), m.group(3)
     btn = await get_button(bid)
@@ -456,7 +463,7 @@ async def cb_mi_type(update, context):
 
 async def cb_mi_toggle(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     bid, n, arg = m.group(1), int(m.group(2)), m.group(3)
     if arg == "all":
@@ -475,7 +482,6 @@ async def cb_mi_toggle(update, context):
 
 async def cb_mi_done(update, context):
     q = update.callback_query
-    await q.answer()
     m = context.matches[0]
     bid, n = ObjectId(m.group(1)), int(m.group(2))
     btn = await get_button(bid)
@@ -499,12 +505,14 @@ async def cb_mi_done(update, context):
         ms.pop(str(n), None)
         note = f"🗑️ Milestone {n} remove ho gaya (kuch select nahi tha)."
     await db.buttons.update_one({"_id": bid}, {"$set": {"milestones": ms}})
-    await q.answer(note, show_alert=True)
+    # single answer with alert — was double-answered before (alert never showed)
+    await safe_answer(q, note, alert=True)
     await render_mil_panel(update, context, bid)
 
 
 async def cb_mi_text(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     m = context.matches[0]
+    context.user_data.pop("tmp_content", None)
     context.user_data["st"] = ("mi_text", m.group(1), int(m.group(2)))
     await render(update, context, "📝 <b>Naya reward text bhejo:</b>", kb([[cb("❌ Cancel", "cancel")]]))

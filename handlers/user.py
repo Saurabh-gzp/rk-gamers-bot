@@ -3,6 +3,7 @@ import logging
 from urllib.parse import quote
 
 from telegram import InlineKeyboardButton
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from config import BOT_USERNAME
@@ -25,6 +26,7 @@ from utils.helpers import (
     is_admin,
     item_label,
     render,
+    safe_answer,
     send_content_item,
     send_safe,
     user_link_name,
@@ -146,7 +148,7 @@ async def process_leave(context, channel_id, invitee_id):
 # ------------------------------------------------------------------ join check (invitee side)
 async def cb_join_check(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     bno, inviter_id = int(m.group(1)), int(m.group(2))
     tg = q.from_user
@@ -182,10 +184,11 @@ async def cb_join_check(update, context):
 # ------------------------------------------------------------------ open reward button
 async def cb_open(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     bno, page = int(m.group(1)), int(m.group(2))
     tg = q.from_user
+    context.user_data.pop("st", None)  # navigation cancels any pending input
 
     btn = await get_button_by_no(bno)
     if not btn or (not btn.get("active") and not is_admin(tg.id)):
@@ -217,7 +220,7 @@ async def cb_open(update, context):
 
 async def cb_link(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     bno, page = int(m.group(1)), int(m.group(2))
     tg = q.from_user
@@ -248,10 +251,11 @@ async def cb_link(update, context):
 
 async def cb_getc(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     m = context.matches[0]
     bno = int(m.group(1))
     tg = q.from_user
+    context.user_data.pop("st", None)
 
     btn = await get_button_by_no(bno)
     if not btn or not btn.get("direct"):
@@ -283,12 +287,18 @@ async def profile_text(tg):
 
 async def cb_prof(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
+    context.user_data.pop("st", None)
     await render(update, context, await profile_text(q.from_user), back_home())
 
 
 async def cmd_profile(update, context):
-    await update.message.reply_text(await profile_text(update.effective_user), reply_markup=back_home())
+    await update.message.reply_text(
+        await profile_text(update.effective_user),
+        reply_markup=back_home(),
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
 
 
 HELP_TEXT = (
@@ -307,9 +317,15 @@ HELP_TEXT = (
 
 
 async def cb_help(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)
     await render(update, context, HELP_TEXT, back_home())
 
 
 async def cmd_help(update, context):
-    await update.message.reply_text(HELP_TEXT, reply_markup=back_home())
+    await update.message.reply_text(
+        HELP_TEXT,
+        reply_markup=back_home(),
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )

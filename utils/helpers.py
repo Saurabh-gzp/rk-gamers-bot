@@ -18,6 +18,18 @@ def esc(s) -> str:
     return html.escape(str(s or ""))
 
 
+async def safe_answer(q, text=None, alert=False):
+    """Answer a callback query without ever raising.
+    Stale/expired queries (service restart, cold start, slow tap) must NOT
+    kill the handler — the screen should still update."""
+    if q is None:
+        return
+    try:
+        await q.answer(text=text, show_alert=alert)
+    except TelegramError:
+        pass
+
+
 def mention(uid, name) -> str:
     return f"<a href='tg://user?id={uid}'>{esc(name)}</a>"
 
@@ -38,8 +50,11 @@ async def send_safe(bot, chat_id, text, kb=None):
     except BadRequest as e:
         msg = str(e).lower()
         if "parse" in msg or "entities" in msg or "markdown" in msg or "tag" in msg:
+            # bad HTML in content -> escape everything so text is still delivered
             try:
-                return await bot.send_message(chat_id, text, reply_markup=kb, disable_web_page_preview=True)
+                return await bot.send_message(
+                    chat_id, esc(text), reply_markup=kb, disable_web_page_preview=True
+                )
             except TelegramError:
                 return None
         return None
@@ -59,6 +74,15 @@ async def render(update, context, text, kb=None):
         except BadRequest as e:
             if "not modified" in str(e).lower():
                 return
+            if "parse" in str(e).lower() or "entities" in str(e).lower():
+                # bad HTML in dynamic content (notebook/reward text) -> show escaped
+                try:
+                    await q.message.edit_text(
+                        esc(text), reply_markup=kb, disable_web_page_preview=True
+                    )
+                    return
+                except TelegramError:
+                    pass
         except TelegramError:
             pass
         chat_id = update.effective_chat.id if update.effective_chat else q.from_user.id
@@ -166,7 +190,7 @@ def item_label(item, idx=None):
         t = t.replace("<code>", "").replace("</code>", "").replace("<u>", "").replace("</u>", "")
         t = t.replace("<s>", "").replace("</s>", "").replace("<a href=", "").replace("</a>", "")
         t = " ".join(t.split())[:40]
-        return f"{e} Text: {t}..."
+        return f"{e} Text: {esc(t)}..."
     return f"{e} {item.get('type', 'media').capitalize()}" + (f" {idx + 1}" if idx is not None else "")
 
 

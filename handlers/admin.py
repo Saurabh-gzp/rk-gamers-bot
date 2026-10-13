@@ -2,6 +2,7 @@
 import asyncio
 import logging
 
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from config import OWNER_ID
@@ -15,7 +16,7 @@ from database.db import (
     upd_settings,
     upsert_user,
 )
-from utils.helpers import esc, is_admin, item_label, render, send_content_item, send_safe
+from utils.helpers import esc, is_admin, item_label, render, safe_answer, send_content_item, send_safe
 from utils.keyboards import back_adm, cb, confirm_kb, kb, nav_row, paginate, url
 
 log = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ def admin_check(func):
         u = update.effective_user
         if not u or not is_admin(u.id):
             if update.callback_query:
-                await update.callback_query.answer("⛔ Admin only!", show_alert=True)
+                await safe_answer(update.callback_query, "⛔ Admin only!", alert=True)
             return
         return await func(update, context)
     return wrapper
@@ -58,13 +59,15 @@ async def render_panel(update, context):
 
 @admin_check
 async def cb_panel(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)  # navigation cancels any pending input
     await render_panel(update, context)
 
 
 @admin_check
 async def cb_stats(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)
     import datetime
     now = datetime.datetime.now(datetime.timezone.utc)
     day_ago = now - datetime.timedelta(days=1)
@@ -98,7 +101,8 @@ async def cb_stats(update, context):
 # ------------------------------------------------------------------ broadcast
 @admin_check
 async def cb_broadcast(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("tmp_content", None)
     context.user_data["st"] = ("bc",)
     await render(
         update, context,
@@ -110,7 +114,7 @@ async def cb_broadcast(update, context):
 
 @admin_check
 async def cb_bc_ok(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     item = context.user_data.pop("bc_item", None)
     if not item:
         return await render(update, context, "❌ Koi broadcast content nahi mila.", back_adm())
@@ -135,7 +139,7 @@ async def cb_bc_ok(update, context):
     summary = f"✅ <b>Broadcast Complete!</b>\n\n👥 Sent: <b>{sent}</b>\n❌ Failed: {failed}\n📊 Total: {total}"
     if status:
         try:
-            await status.edit_text(summary)
+            await status.edit_text(summary, parse_mode=ParseMode.HTML)
         except Exception:
             await send_safe(context.bot, update.effective_chat.id, summary)
     else:
@@ -144,7 +148,7 @@ async def cb_bc_ok(update, context):
 
 @admin_check
 async def cb_bc_no(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     context.user_data.pop("bc_item", None)
     context.user_data.pop("st", None)
     await render(update, context, "❌ Broadcast cancel ho gaya.", back_adm())
@@ -153,7 +157,8 @@ async def cb_bc_no(update, context):
 # ------------------------------------------------------------------ user management
 @admin_check
 async def cb_users(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)
     page = int(context.matches[0].group(1))
     await render_user_list(update, context, page)
 
@@ -174,7 +179,8 @@ async def render_user_list(update, context, page=0):
 
 @admin_check
 async def cb_user_view(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)
     m = context.matches[0]
     uid, page = int(m.group(1)), int(m.group(2))
     await render_user_view(update, context, uid, page)
@@ -208,7 +214,8 @@ async def render_user_view(update, context, uid, page=0):
 
 @admin_check
 async def cb_search(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("tmp_content", None)
     context.user_data["st"] = ("u_search",)
     await render(
         update, context,
@@ -219,7 +226,7 @@ async def cb_search(update, context):
 
 @admin_check
 async def cb_ban(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     m = context.matches[0]
     uid, page = int(m.group(1)), int(m.group(2))
     if is_admin(uid):
@@ -230,7 +237,7 @@ async def cb_ban(update, context):
 
 @admin_check
 async def cb_unban(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     m = context.matches[0]
     uid, page = int(m.group(1)), int(m.group(2))
     await db.users.update_one({"_id": uid}, {"$set": {"banned": False}})
@@ -267,25 +274,26 @@ async def render_settings(update, context):
 
 @admin_check
 async def cb_settings(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     context.user_data.pop("st", None)
     await render_settings(update, context)
 
 
 @admin_check
 async def cb_tgl_fs(update, context):
-    await update.callback_query.answer()
+    q = update.callback_query
     s = await get_settings()
     if s.get("force_sub_on") and not s.get("force_sub"):
-        await update.callback_query.answer("⚠️ Pehle channels add karo!", show_alert=True)
+        await safe_answer(q, "⚠️ Pehle channels add karo!", alert=True)
         return
+    await safe_answer(q)
     await upd_settings(force_sub_on=not s.get("force_sub_on"))
     await render_settings(update, context)
 
 
 @admin_check
 async def cb_tgl_strict(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     s = await get_settings()
     await upd_settings(strict=not s.get("strict", True))
     await render_settings(update, context)
@@ -293,7 +301,7 @@ async def cb_tgl_strict(update, context):
 
 @admin_check
 async def cb_tgl_alert(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     s = await get_settings()
     await upd_settings(newuser_alert=not s.get("newuser_alert", True))
     await render_settings(update, context)
@@ -301,7 +309,8 @@ async def cb_tgl_alert(update, context):
 
 @admin_check
 async def cb_fs_pick(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)
     s = await get_settings()
     chans = await all_channels()
     rows = []
@@ -317,7 +326,7 @@ async def cb_fs_pick(update, context):
 
 @admin_check
 async def cb_fs_toggle(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     cid = int(context.matches[0].group(1))
     s = await get_settings()
     cur = s.get("force_sub", [])
@@ -328,5 +337,5 @@ async def cb_fs_toggle(update, context):
 
 @admin_check
 async def cb_fs_done(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
     await render_settings(update, context)

@@ -15,7 +15,7 @@ from database.db import (
     upsert_user,
     upd_settings,
 )
-from utils.helpers import bot_is_member, esc, is_admin, render, send_safe
+from utils.helpers import bot_is_member, esc, is_admin, render, safe_answer, send_safe
 from utils.keyboards import cb, kb, nav_row, paginate, url
 
 log = logging.getLogger(__name__)
@@ -200,8 +200,9 @@ async def send_fs_gate(update, context, missing_channels):
 
 async def cb_fschk(update, context):
     q = update.callback_query
-    await q.answer()
+    await safe_answer(q)
     tg = q.from_user
+    context.user_data.pop("st", None)
     s = await get_settings()
     if is_admin(tg.id) or not s.get("force_sub_on") or not s.get("force_sub"):
         return await show_main_menu(update, context)
@@ -218,16 +219,18 @@ async def cb_fschk(update, context):
 
 # ------------------------------------------------------------------ callbacks
 async def cb_noop(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
 
 
 async def cb_home(update, context):
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)  # navigation cancels any pending input
     await show_main_menu(update, context)
 
 
 async def cb_page(update, context):
     """User main-menu pagination: upg_<page>"""
-    await update.callback_query.answer()
+    await safe_answer(update.callback_query)
+    context.user_data.pop("st", None)
     page = int(context.matches[0].group(1))
     await show_main_menu(update, context, page=page)
