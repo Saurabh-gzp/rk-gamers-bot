@@ -230,6 +230,21 @@ async def count_joins(inviter_id, button_no):
     return await db.joins.count_documents({"inviter": inviter_id, "button_no": button_no, "active": True})
 
 
+async def prior_channel_join(invitee_id, channel_id, exclude_button_no):
+    """ANTI-FRAUD: is user+channel ka koi bhi join record (active ho ya leave ke
+    baad inactive), kisi DUSRE button pe. Ek user ek channel me sirf ek baar
+    count hota hai — leave karke dobara join (kisi bhi button/key se) dobara
+    credit nahi dega. Same-button rejoin ka reactivate behavior alag se intact
+    rehta hai (wo existing record pe hota hai, naya record nahi banta)."""
+    if not channel_id:
+        return None
+    return await db.joins.find_one({
+        "invitee": invitee_id,
+        "channel_id": channel_id,
+        "button_no": {"$ne": exclude_button_no},
+    })
+
+
 # ---------------------------------------------------------------- milestones (delivered rewards ledger)
 async def milestone_delivered(user_id, button_no, n):
     return await db.milestones.find_one({"user": user_id, "button_no": button_no, "n": n})

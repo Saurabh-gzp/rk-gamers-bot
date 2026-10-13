@@ -18,6 +18,7 @@ from database.db import (
     mark_invites_done,
     mark_milestone,
     milestone_delivered,
+    prior_channel_join,
     upsert_user,
 )
 from utils.helpers import (
@@ -76,10 +77,27 @@ async def complete_join(context, invitee_tg, inviter_id, btn) -> bool:
     from database.db import utcnow
     invitee_id = invitee_tg.id
     bno = btn["no"]
+    channel_id = btn.get("channel_id")
 
     existing = await get_join(inviter_id, invitee_id, bno)
     if existing and existing.get("active"):
         return False  # already counted (race/duplicate)
+
+    if not existing:
+        # ANTI-FRAUD (cross-button farming): ek user ek channel me SIRF EK BAAR
+        # count hota hai, chahe kitne bhi buttons ho. Leave karke dobara join
+        # (kisi bhi button/key se) = no credit. Ye credit-time ka hard gate hai —
+        # chat_member auto-detect aur "I've Joined" dono paths cover hote hain.
+        prior = await prior_channel_join(invitee_id, channel_id, bno)
+        if prior is not None:
+            await mark_invites_done(invitee_id, inviter_id, bno)
+            await send_safe(
+                context.bot, inviter_id,
+                f"🛡️ <b>{user_link_name(invitee_tg)}</b> is channel me <b>pehle hi counted</b> "
+                f"ho chuka hai (kisi aur key se) — <b>{esc(btn['name'])}</b> ke liye "
+                f"<b>dobara count nahi hoga</b>.",
+            )
+            return False
 
     reactivated = False
     if existing:
@@ -320,6 +338,7 @@ HELP_TEXT = (
     "• Fake/self join kaam nahi karega — bot sab yaad rakhta hai\n"
     "• Jo user channel me <b>pehle se</b> hai wo count nahi hota — sirf naye members\n"
     "• Channel leave karne pe count minus ho jata hai\n"
+    "• Ek user ek channel me <b>sirf ek baar</b> count hota hai — leave karke dobara join karne pe nahi\n"
     "• Ek user ek reward me sirf ek baar count hota hai\n\n"
     "❓ Koi problem ho to owner se contact karo."
 )

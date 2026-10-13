@@ -11,6 +11,7 @@ from database.db import (
     get_button_by_no,
     get_settings,
     get_channel,
+    prior_channel_join,
     upsert_invite,
     upsert_user,
     upd_settings,
@@ -182,6 +183,23 @@ async def handle_ref(update, context, tg, payload) -> str | None:
         return (
             "ℹ️ Aap pehle se is channel ke member ho.\n"
             "Sirf <b>naye members</b> hi invite me count hote hain — purana member dobara count nahi hota."
+        )
+
+    # ANTI-FRAUD (cross-button farming): ek user ek channel me SIRF EK BAAR count
+    # hota hai, chahe kitne bhi buttons/keys ho. Leave karke dobara join karne pe
+    # dobara credit nahi milega — farmer ko link-click pe hi rok do.
+    prior = await prior_channel_join(tg.id, chan["channel_id"], bno)
+    if prior is not None:
+        await send_safe(
+            context.bot, inviter_id,
+            f"🛡️ {who} ne aapka link click kiya!\n"
+            f"⚠️ Lekin ye user is channel me <b>pehle hi counted</b> ho chuka hai "
+            f"(kisi aur key se) — <b>dobara count nahi milega</b>.\n"
+            f"Leave karke rejoin karne se farming nahi chalegi.",
+        )
+        return (
+            "🛡️ Aap is channel me <b>pehle hi counted</b> ho chuke ho (kisi aur key se).\n"
+            "Ek user ek channel me <b>sirf ek baar</b> count hota hai — dobara reward nahi milega."
         )
 
     # store pending invite — completed when user actually joins the channel
