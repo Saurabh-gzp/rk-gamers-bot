@@ -310,7 +310,7 @@ HELP_TEXT = (
     "4️⃣ Jaise hi koi link se aakar channel join karega — aapko notification milega "
     "aur reward automatically deliver ho jayega! 🎉\n\n"
     "🔗 <b>Link kaise kaam karta hai?</b>\n"
-    "• Aapka link aisa hota hai: t.me/rkgamersbot?start=r_<aapki-id>_<button-no>\n"
+    "• Aapka link aisa hota hai: t.me/rkgamersbot?start=r_&lt;aapki-id&gt;_&lt;button-no&gt;\n"
     "• Dost link pe click karta hai → seedha bot ke paas aata hai\n"
     "• Bot usko <b>➕ Channel Join Karo</b> button deta hai\n"
     "• Join karte hi bot khud verify karta hai (channel membership check)\n"
