@@ -200,6 +200,18 @@ async def cb_join_check(update, context):
 
 
 # ------------------------------------------------------------------ open reward button
+async def deliver_direct(update, context, btn, tg):
+    """Direct mode: content delivered straight away — no info screen,
+    no invites line, no extra 'Get Content Now' tap."""
+    items = btn.get("content") or []
+    if not items:
+        return await render(update, context, "📭 Abhi is button me koi content nahi hai.", back_home())
+    chat_id = update.effective_chat.id if update.effective_chat else tg.id
+    await send_safe(context.bot, chat_id, "📤 Delivering...")
+    for it in items:
+        await send_content_item(context.bot, tg.id, it)
+
+
 async def cb_open(update, context):
     q = update.callback_query
     await safe_answer(q)
@@ -211,6 +223,11 @@ async def cb_open(update, context):
     btn = await get_button_by_no(bno)
     if not btn or (not btn.get("active") and not is_admin(tg.id)):
         return await render(update, context, "❌ Ye reward abhi available nahi hai.", back_home())
+
+    # Direct Delivery ON: tapping the reward button name delivers the file
+    # immediately — the info screen (invites line + 'Get Content Now') is skipped.
+    if btn.get("direct"):
+        return await deliver_direct(update, context, btn, tg)
 
     cnt = await count_joins(tg.id, bno)
     ms = btn.get("milestones") or {}
@@ -224,11 +241,7 @@ async def cb_open(update, context):
     if mx:
         text += f" / {mx} required"
 
-    rows = []
-    if btn.get("direct"):
-        rows.append([cb("📥 Get Content Now", f"ucont_{bno}_{page}")])
-    else:
-        rows.append([cb("🔗 Get My Share Link", f"ulink_{bno}_{page}")])
+    rows = [[cb("🔗 Get My Share Link", f"ulink_{bno}_{page}")]]
     rows.append([cb("👤 Profile", "uprof"), cb("🏠 Menu", "home")])
     if is_admin(tg.id):
         from bson import ObjectId
@@ -278,13 +291,9 @@ async def cb_getc(update, context):
     btn = await get_button_by_no(bno)
     if not btn or not btn.get("direct"):
         return await render(update, context, "❌ Ye content direct available nahi hai.", back_home())
-    items = btn.get("content") or []
-    if not items:
-        return await render(update, context, "📭 Abhi is button me koi content nahi hai.", back_home())
-    chat_id = update.effective_chat.id if update.effective_chat else tg.id
-    await send_safe(context.bot, chat_id, "📤 Delivering...")
-    for it in items:
-        await send_content_item(context.bot, tg.id, it)
+    # Kept for already-sent messages that still carry the old button —
+    # new UI never renders it (direct mode delivers on button tap itself).
+    return await deliver_direct(update, context, btn, tg)
 
 
 # ------------------------------------------------------------------ profile & help
